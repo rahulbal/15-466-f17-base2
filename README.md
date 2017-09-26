@@ -4,7 +4,7 @@ NOTE: please fill in the first section with information about your game.
 
 Robot Fun Police is Rahul Balakrishnan's implementation of [*Design Document*](http://graphics.cs.cmu.edu/courses/15-466-f17/game2-designs/jmccann/) for game2 in 15-466-f17.
 
-##Screenshots
+## Screenshots
 
 ![screenshot1](game2.png)
 ![screenshot2](game2_work.png)
