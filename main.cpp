@@ -351,6 +351,9 @@ int main(int argc, char **argv) {
 
 	bool should_quit = false;
 	float theta = 0.0f;
+	float phi = 0.0f;
+	float rho = 0.0f;
+	float gamma = 0.0f;
 
 	while (true) {
 		static SDL_Event evt;
@@ -421,26 +424,77 @@ int main(int argc, char **argv) {
 			obj->transform.position.z += (balloon_dir[2] ? 1 : -1) * elapsed * 1.0;
 			
 
+			obj = n2o.find(LINK3)->second;
 			auto *keystate = SDL_GetKeyboardState(NULL);
 			if (keystate[SDL_SCANCODE_Z]) {
-				theta += elapsed * 0.2f;
-				theta -= std::floor(theta);
-				obj = n2o.find(LINK3)->second;
-				obj->transform.rotation = glm::angleAxis(std::cos(theta),
-					glm::vec3(0.0f, 1.0f, 0.0f));
+				if (theta < M_PI / 2) {
+					theta += elapsed * 0.2f;
+				}
+				obj->transform.rotation = glm::angleAxis(theta / float(M_PI) * 180.f,
+					glm::vec3(1.0f, 0.0f, 0.0f));
 			}
 
-			if (keystate[SDLK_x]) {
+			if (keystate[SDL_SCANCODE_X]) {
+				if (theta > -M_PI / 2) {
+					theta -= elapsed * 0.2f;
+				}
+				obj->transform.rotation = glm::angleAxis(theta / float(M_PI) * 180.f,
+					glm::vec3(1.0f, 0.0f, 0.0f));
 
 			}
 
-			if (keystate[SDLK_a]) {
+			obj = n2o.find(LINK2)->second;
+			if (keystate[SDL_SCANCODE_A]) {
+				if (theta < M_PI / 2) {
+					phi += elapsed * 0.2f;
+				}
+				obj->transform.rotation = glm::angleAxis(phi / float(M_PI) * 180.f,
+					glm::vec3(1.0f, 0.0f, 0.0f));
 
 			}
 
-			if (keystate[SDLK_s]) {
-
+			if (keystate[SDL_SCANCODE_S]) {
+				if (theta < M_PI / 2) {
+					phi -= elapsed * 0.2f;
+				}
+				obj->transform.rotation = glm::angleAxis(phi / float(M_PI) * 180.f,
+					glm::vec3(1.0f, 0.0f, 0.0f));
 			}
+
+			obj = n2o.find(LINK1)->second;
+			if (keystate[SDL_SCANCODE_PERIOD]) {
+				if (theta < M_PI / 2) {
+					rho += elapsed * 0.2f;
+				}
+				obj->transform.rotation = glm::angleAxis(rho / float(M_PI) * 180.f,
+					glm::vec3(1.0f, 0.0f, 0.0f));
+			}
+
+			if (keystate[SDL_SCANCODE_SLASH]) {
+				if (theta < M_PI / 2) {
+					rho -= elapsed * 0.2f;
+				}
+				obj->transform.rotation = glm::angleAxis(rho / float(M_PI) * 180.f,
+					glm::vec3(1.0f, 0.0f, 0.0f));
+			}
+
+			obj = n2o.find(BASE)->second;
+			if (keystate[SDL_SCANCODE_SEMICOLON]) {
+				if (theta < M_PI / 2) {
+					gamma += elapsed * 0.2f;
+				}
+				obj->transform.rotation = glm::angleAxis(gamma / float(M_PI) * 180.f,
+					glm::vec3(0.0f, 0.0f, 1.0f));
+			}
+
+			if (keystate[SDL_SCANCODE_APOSTROPHE]) {
+				if (theta < M_PI / 2) {
+					gamma -= elapsed * 0.2f;
+				}
+				obj->transform.rotation = glm::angleAxis(gamma / float(M_PI) * 180.f,
+					glm::vec3(0.0f, 0.0f, 1.0f));
+			}
+			
 			//camera:
 			scene.camera.transform.position = camera.radius * glm::vec3(
 				std::cos(camera.elevation) * std::cos(camera.azimuth),
