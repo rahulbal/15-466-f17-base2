@@ -317,6 +317,23 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	//------- manually creating heirarchy ----------
+	
+	Scene::Object *tmp1, *tmp2;
+	tmp1 = n2o.find(BASE)->second;
+	tmp2 = n2o.find(STAND)->second;
+	tmp1->transform.set_parent(&(tmp2->transform));
+	tmp2 = tmp1;
+	tmp1 = n2o.find(LINK1)->second;
+	tmp1->transform.set_parent(&(tmp2->transform));
+	tmp2 = tmp1;
+	tmp1 = n2o.find(LINK2)->second;
+	tmp1->transform.set_parent(&(tmp2->transform));
+	tmp2 = tmp1;
+	tmp1 = n2o.find(LINK3)->second;
+	tmp1->transform.set_parent(&(tmp2->transform));
+
+
 	/*
 	//create a weird waving tree stack:
 	std::vector< Scene::Object * > tree_stack;
