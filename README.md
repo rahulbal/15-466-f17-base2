@@ -1,29 +1,30 @@
 NOTE: please fill in the first section with information about your game.
 
-# *Game Title*
+# Robot Fun Police
 
-*Game Title* is *Your Name*'s implementation of [*Design Document*](http://graphics.cs.cmu.edu/courses/15-466-f17/game2-designs/put-real-link-here) for game2 in 15-466-f17.
+Robot Fun Police is Rahul Balakrishnan's implementation of [*Design Document*](http://graphics.cs.cmu.edu/courses/15-466-f17/game2-designs/jmccann/) for game2 in 15-466-f17.
 
-*Include a Screenshot Here*
+##Screenshots
 
-## Build Notes
+![screenshot1](game2.png)
+![screenshot2](game2_work.png)
 
-*Include any special notes or steps required to build your game here. If there are no special notes, delete this section.*
+## Pipelines
 
-## Asset Pipeline
-
-*Briefly describe the asset pipeline for this game. What sorts of source files are used? How are they processed? How are they loaded?*
+The python script export meshes located in models extracts the vertices, texture coordinates and the dimension of the object it extracts.
+To create the assets in dist execute the python with blender.
+The textures were manually extracted.
 
 ## Architecture
 
-*Provide a brief introduction to how you implemented the design. Talk about the basic structure of your code.*
+My largest investment was in textures. I feel that I really nailed the textures this time around. The code is more structured using maps to easily access data.
+The movement script has been improved.
 
 ## Reflection
 
-*Reflect on the assignment. What was difficult? What worked well? If you were doing it again, what would you change?*
+I expected scene to be related dynamically from the scene script. I turns out there was no implementation. I found this out too late to do anything about it. Should have started earlier.
 
-*Reflect on the design document. What was clear and what was ambiguous? How did you resolve the ambiguities?*
-
+I used multiple texture levels. That feels like an accomplishment. I have a pop mechanism built and I am sure the texture will work but have not implemented it yet.
 
 # About Base2
 
