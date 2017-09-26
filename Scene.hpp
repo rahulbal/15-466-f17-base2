@@ -69,6 +69,8 @@ struct Scene {
 
 		GLuint tex;
 		int texture_used;
+
+		glm::vec3 dimension;
 	};
 	struct Light {
 		Transform transform;

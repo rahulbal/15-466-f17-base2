@@ -98,6 +98,13 @@ for name in to_write:
     index += struct.pack('I', vertex_count)
     index += struct.pack('I', len(mesh.polygons) * 3)
 
+
+#######################################################
+#   Credit to ideasman42 for this post 
+#   https://blender.stackexchange.com/questions/4820/exporting-uv-coordinates
+#   which was used to acquire the vertex texture coordinates
+
+
     #write the mesh:
     for poly in mesh.polygons:
         for vert, loop in zip(poly.vertices, poly.loop_indices):
@@ -109,6 +116,8 @@ for name in to_write:
                 data += struct.pack("f",item)
 
     vertex_count += len(mesh.polygons) * 3
+#######################################################
+
 
 #check that we wrote as much data as anticipated:
 assert(vertex_count * (3 * 4 + 3 * 4 + 2 * 4) == len(data))
@@ -166,6 +175,7 @@ for obj in bpy.data.objects:
     scene += struct.pack('3f', transform[0].x, transform[0].y, transform[0].z)
     scene += struct.pack('4f', transform[1].x, transform[1].y, transform[1].z, transform[1].w)
     scene += struct.pack('3f', transform[2].x, transform[2].y, transform[2].z)
+    scene += struct.pack('3f', obj.dimensions.x, obj.dimensions.y, obj.dimensions.z)
 
 print("opening file to write with")
 #write the strings chunk and scene chunk to an output blob:

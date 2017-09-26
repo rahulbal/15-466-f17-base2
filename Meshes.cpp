@@ -80,6 +80,32 @@ void Meshes::load(std::string const &filename, Attributes const &attributes) {
 			mesh.vao = vao;
 			mesh.start = entry.vertex_start;
 			mesh.count = entry.vertex_count;
+/*
+			mesh.max = data[mesh.start].v;
+			mesh.min = data[mesh.start].v;
+
+			for (auto i = mesh.start; i < mesh.start + mesh.count; i++) {
+				if (mesh.max.x > data[i].v.x) {
+					mesh.max.x = data[i].v.x;
+				}
+				if (mesh.max.y > data[i].v.y) {
+					mesh.max.y = data[i].v.y;
+				}
+				if (mesh.max.z > data[i].v.z) {
+					mesh.max.z = data[i].v.z;
+				}
+
+				if (mesh.max.x > data[i].v.x) {
+					mesh.max.x = data[i].v.x;
+				}
+				if (mesh.max.y > data[i].v.y) {
+					mesh.max.y = data[i].v.y;
+				}
+				if (mesh.max.z > data[i].v.z) {
+					mesh.max.z = data[i].v.z;
+				}
+			}
+*/
 			bool inserted = meshes.insert(std::make_pair(name, mesh)).second;
 			if (!inserted) {
 				std::cerr << "WARNING: mesh name '" + name + "' in filename '" + filename + "' collides with existing mesh." << std::endl;

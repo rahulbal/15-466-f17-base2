@@ -32,6 +32,15 @@ static const std::string PNG_LIST[NUM_PNG] = {
 	"cube.png",
 };
 
+static const std::string B1 = std::string("Balloon1");
+static const std::string B2 = std::string("Balloon2");
+static const std::string B3 = std::string("Balloon3");
+static const std::string BASE = std::string("Base");
+static const std::string STAND = std::string("Stand");
+static const std::string LINK1 = std::string("Link1");
+static const std::string LINK2 = std::string("Link2");
+static const std::string LINK3 = std::string("Link3");
+
 int main(int argc, char **argv) {
 	//Configuration:
 	struct {
@@ -224,6 +233,8 @@ int main(int argc, char **argv) {
 	n2id["Balloon2-Pop"] = 1;
 	n2id["Balloon3-Pop"] = 2;
 
+	std::map <std::string, Scene::Object*> n2o;
+
 	//------------ meshes ------------
 
 	Meshes meshes;
@@ -250,7 +261,7 @@ int main(int argc, char **argv) {
 	//(transform will be handled in the update function below)
 
 	//add some objects from the mesh library:
-	auto add_object = [&](std::string const &name, glm::vec3 const &position, glm::quat const &rotation, glm::vec3 const &scale, int &index, GLuint &tex) -> Scene::Object & {
+	auto add_object = [&](std::string const &name, glm::vec3 const &position, glm::quat const &rotation, glm::vec3 const &scale, int &index, GLuint &tex, glm::vec3 const &dimension) -> Scene::Object & {
 		Mesh const &mesh = meshes.get(name);
 		scene.objects.emplace_back();
 		Scene::Object &object = scene.objects.back();
@@ -266,6 +277,8 @@ int main(int argc, char **argv) {
 		object.program_tex = program_tex;
 		object.tex = tex;
 		object.texture_used = index;
+		object.dimension = dimension;
+		n2o[name] = &object;
 		return object;
 	};
 
@@ -283,8 +296,11 @@ int main(int argc, char **argv) {
 				glm::vec3 position;
 				glm::quat rotation;
 				glm::vec3 scale;
+				glm::vec3 dimension;
 			};
-			static_assert(sizeof(SceneEntry) == 48, "Scene entry should be packed");
+			static_assert(sizeof(SceneEntry) == 60, "Scene entry should be packed");
+
+			std::cout << "scn0 accessed" << std::endl;
 
 			std::vector< SceneEntry > data;
 			read_chunk(file, "scn0", &data);
@@ -296,7 +312,7 @@ int main(int argc, char **argv) {
 				std::string name(&strings[0] + entry.name_begin, &strings[0] + entry.name_end);
 				int index = n2id.find(name)->second;
 				std::cout << name << " " << index << " " << tex[index] << std::endl;
-				add_object(name, entry.position, entry.rotation, entry.scale, index, tex[index]);
+				add_object(name, entry.position, entry.rotation, entry.scale, index, tex[index], entry.dimension);
 			}
 		}
 	}
@@ -329,10 +345,13 @@ int main(int argc, char **argv) {
 	//------------ game state -----------
 	
 	int number_of_balloons = 3;
+	bool balloon_dir[number_of_balloons];
 
 	//------------ game loop ------------
 
 	bool should_quit = false;
+	float theta = 0.0f;
+
 	while (true) {
 		static SDL_Event evt;
 		while (SDL_PollEvent(&evt) == 1) {
@@ -357,7 +376,7 @@ int main(int argc, char **argv) {
 
 		auto current_time = std::chrono::high_resolution_clock::now();
 		static auto previous_time = current_time;
-		//float elapsed = std::chrono::duration< float >(current_time - previous_time).count();
+		float elapsed = std::chrono::duration< float >(current_time - previous_time).count();
 		previous_time = current_time;
 
 		{ //update game state:
@@ -374,6 +393,54 @@ int main(int argc, char **argv) {
 			}
 			*/
 
+			// update balloon positions
+			Scene::Object *obj;
+
+			obj = n2o.find(B1)->second;
+			if (obj->transform.position.z - obj->dimension.z < -0.5f) {
+				balloon_dir[0] = true;
+			} else if (obj->transform.position.z - obj->dimension.z / 2 > 5.0f) {
+				balloon_dir[0] = false;
+			}
+			obj->transform.position.z += (balloon_dir[0] ? 1 : -1) * elapsed * 1.0;
+
+			obj = n2o.find(B2)->second;
+			if (obj->transform.position.z - obj->dimension.z < -0.5f) {
+				balloon_dir[1] = true;
+			} else if (obj->transform.position.z - obj->dimension.z / 2 > 5.0f) {
+				balloon_dir[1] = false;
+			}
+			obj->transform.position.z += (balloon_dir[1] ? 1 : -1) * elapsed * 1.0;
+
+			obj = n2o.find(B3)->second;
+			if (obj->transform.position.z - obj->dimension.z < -0.5f) {
+				balloon_dir[2] = true;
+			} else if (obj->transform.position.z - obj->dimension.z / 2 > 5.0f) {
+				balloon_dir[2] = false;
+			}
+			obj->transform.position.z += (balloon_dir[2] ? 1 : -1) * elapsed * 1.0;
+			
+
+			auto *keystate = SDL_GetKeyboardState(NULL);
+			if (keystate[SDL_SCANCODE_Z]) {
+				theta += elapsed * 0.2f;
+				theta -= std::floor(theta);
+				obj = n2o.find(LINK3)->second;
+				obj->transform.rotation = glm::angleAxis(std::cos(theta),
+					glm::vec3(0.0f, 1.0f, 0.0f));
+			}
+
+			if (keystate[SDLK_x]) {
+
+			}
+
+			if (keystate[SDLK_a]) {
+
+			}
+
+			if (keystate[SDLK_s]) {
+
+			}
 			//camera:
 			scene.camera.transform.position = camera.radius * glm::vec3(
 				std::cos(camera.elevation) * std::cos(camera.azimuth),
@@ -390,6 +457,8 @@ int main(int argc, char **argv) {
 			);
 			scene.camera.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
 		}
+
+		
 
 		//draw output:
 		glClearColor(0.5, 0.5, 0.5, 0.0);

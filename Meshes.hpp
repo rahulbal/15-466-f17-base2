@@ -8,6 +8,8 @@ struct Mesh {
 	GLuint vao = 0;
 	GLuint start = 0;
 	GLuint count = 0;
+	//glm::vec3 max;
+	//glm::vec3 min;
 };
 
 //"Meshes" loads a collection of meshes and builds VAOs for 'em
