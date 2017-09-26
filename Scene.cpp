@@ -138,6 +138,10 @@ void Scene::render() {
 			glUniformMatrix3fv(object.program_itmv, 1, GL_FALSE, glm::value_ptr(itmv));
 		}
 
+		glActiveTexture(GL_TEXTURE0 + object.texture_used);
+		glBindTexture(GL_TEXTURE_2D, object.tex);
+		glUniform1i(object.program_tex, object.texture_used);
+		
 		glBindVertexArray(object.vao);
 
 		//draw the object:

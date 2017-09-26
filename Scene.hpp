@@ -65,6 +65,10 @@ struct Scene {
 		GLuint program = 0;
 		GLuint program_mvp = -1U; //uniform index for MVP matrix
 		GLuint program_itmv = -1U; //uniform index for inverse(transpose(mv)) matrix
+		GLuint program_tex = -1U;
+
+		GLuint tex;
+		int texture_used;
 	};
 	struct Light {
 		Transform transform;

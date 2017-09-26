@@ -17,6 +17,21 @@
 static GLuint compile_shader(GLenum type, std::string const &source);
 static GLuint link_program(GLuint vertex_shader, GLuint fragment_shader);
 
+static const int NUM_PNG = 10;
+
+static const std::string PNG_LIST[NUM_PNG] = {
+	"balloon1.png",
+	"balloon2.png",
+	"balloon3.png",
+	"stand.png",
+	"base.png",
+	"link1.png",
+	"link2.png",
+	"link3.png",
+	"crate.png",
+	"cube.png",
+};
+
 int main(int argc, char **argv) {
 	//Configuration:
 	struct {
@@ -86,13 +101,52 @@ int main(int argc, char **argv) {
 
 	//------------ opengl objects / game assets ------------
 
+	//texture:
+	GLuint tex[NUM_PNG];
+	glm::uvec2 tex_size[NUM_PNG];
+	for (int i = 0; i < NUM_PNG; i++) {
+		tex_size[i] = glm::uvec2(0, 0);
+	}
+
+	{ //load textures : 'This is going to be super dirty
+		std::vector< uint32_t > data[NUM_PNG];
+		//std::vector< uint32_t > data;
+
+		//create a texture object:
+		glGenTextures(NUM_PNG, tex);
+
+		for (int i = 0; i < NUM_PNG; i++) {
+			if (!load_png(PNG_LIST[i], &tex_size[i].x, &tex_size[i].y, &data[i], LowerLeftOrigin)) {
+				std::cerr << "Failed to load texture " << PNG_LIST[i] << std::endl;
+				exit(1);
+			}
+			
+			glActiveTexture(GL_TEXTURE0 + i);
+			//bind texture object to GL_TEXTURE_2D:
+			glBindTexture(GL_TEXTURE_2D, tex[i]);
+
+			//upload texture data from data:
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_size[i].x, tex_size[i].y, 0, GL_RGBA, GL_UNSIGNED_BYTE, &data[i][0]);
+
+			std::cout << "i = " << i << " tex[i] = " << tex[i] << std::endl;
+			//set texture sampling parameters:
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		}
+
+	}
+
 	//shader program:
 	GLuint program = 0;
 	GLuint program_Position = 0;
 	GLuint program_Normal = 0;
+	GLuint program_UVCoord = 0;
 	GLuint program_mvp = 0;
 	GLuint program_itmv = 0;
 	GLuint program_to_light = 0;
+	GLuint program_tex = 0;
 	{ //compile shader program:
 		GLuint vertex_shader = compile_shader(GL_VERTEX_SHADER,
 			"#version 330\n"
@@ -100,21 +154,29 @@ int main(int argc, char **argv) {
 			"uniform mat3 itmv;\n"
 			"in vec4 Position;\n"
 			"in vec3 Normal;\n"
+			"in vec2 UVCoord;\n"
 			"out vec3 normal;\n"
+			"out vec2 uvcoord;\n"
 			"void main() {\n"
 			"	gl_Position = mvp * Position;\n"
 			"	normal = itmv * Normal;\n"
+			"	uvcoord = UVCoord;\n"
 			"}\n"
 		);
 
 		GLuint fragment_shader = compile_shader(GL_FRAGMENT_SHADER,
 			"#version 330\n"
 			"uniform vec3 to_light;\n"
+			"uniform sampler2D tex;\n"
 			"in vec3 normal;\n"
+			"in vec2 uvcoord;\n"
 			"out vec4 fragColor;\n"
 			"void main() {\n"
 			"	float light = max(0.0, dot(normalize(normal), to_light));\n"
-			"	fragColor = vec4(light * vec3(1.0, 1.0, 1.0), 1.0);\n"
+			"	vec4 color = texture(tex, uvcoord);\n"
+			"	float alpha = color.w;\n"
+			"	fragColor = vec4(light * vec3(color), alpha);\n"
+			//"	fragColor = color;\n"
 			"}\n"
 		);
 
@@ -125,6 +187,8 @@ int main(int argc, char **argv) {
 		if (program_Position == -1U) throw std::runtime_error("no attribute named Position");
 		program_Normal = glGetAttribLocation(program, "Normal");
 		if (program_Normal == -1U) throw std::runtime_error("no attribute named Normal");
+		program_UVCoord = glGetAttribLocation(program, "UVCoord");
+		if (program_UVCoord == -1U) throw std::runtime_error("no attribute named UVCoord");
 
 		//look up uniform locations:
 		program_mvp = glGetUniformLocation(program, "mvp");
@@ -134,31 +198,59 @@ int main(int argc, char **argv) {
 
 		program_to_light = glGetUniformLocation(program, "to_light");
 		if (program_to_light == -1U) throw std::runtime_error("no uniform named to_light");
+		program_tex = glGetUniformLocation(program, "tex");
+		if (program_tex == -1U) throw std::runtime_error("no uniform named tex");
 	}
+
+	//--------- Game constants -------
+	
+	std::map <std::string, int> n2id; // name to index map
+	n2id["Balloon1"] = 0;
+	n2id["Balloon2"] = 1;
+	n2id["Balloon3"] = 2;
+	n2id["Stand"]	 = 3;
+	n2id["Base"]	 = 4;
+	n2id["Link1"]	 = 5;
+	n2id["Link2"]	 = 6;
+	n2id["Link3"]	 = 7;
+	n2id["Crate"] 	 = 9;	// giving crate cube as it's texture is invisible
+	n2id["Cube.001"] = 9;
+	n2id["Crate.001"] = 9;
+	n2id["Crate.002"] = 9;
+	n2id["Crate.003"] = 9;
+	n2id["Crate.004"] = 9;
+	n2id["Crate.005"] = 9;
+	n2id["Balloon1-Pop"] = 0;
+	n2id["Balloon2-Pop"] = 1;
+	n2id["Balloon3-Pop"] = 2;
 
 	//------------ meshes ------------
 
 	Meshes meshes;
 
+	std::cerr << "Loading meshes!" << std::endl;
 	{ //add meshes to database:
 		Meshes::Attributes attributes;
 		attributes.Position = program_Position;
 		attributes.Normal = program_Normal;
+		attributes.UVCoord = program_UVCoord;
 
 		meshes.load("meshes.blob", attributes);
 	}
+
+	std::cerr << "Successfully loaded the meshes!" << std::endl;
 	
 	//------------ scene ------------
 
 	Scene scene;
 	//set up camera parameters based on window:
-	scene.camera.fovy = glm::radians(60.0f);
+	scene.camera.fovy = glm::radians(80.0f);
 	scene.camera.aspect = float(config.size.x) / float(config.size.y);
 	scene.camera.near = 0.01f;
 	//(transform will be handled in the update function below)
 
 	//add some objects from the mesh library:
-	auto add_object = [&](std::string const &name, glm::vec3 const &position, glm::quat const &rotation, glm::vec3 const &scale) -> Scene::Object & {
+	auto add_object = [&](std::string const &name, glm::vec3 const &position, glm::quat const &rotation, glm::vec3 const &scale, int &index, GLuint &tex) -> Scene::Object & {
 		Mesh const &mesh = meshes.get(name);
 		scene.objects.emplace_back();
 		Scene::Object &object = scene.objects.back();
@@ -171,6 +263,9 @@ int main(int argc, char **argv) {
 		object.program = program;
 		object.program_mvp = program_mvp;
 		object.program_itmv = program_itmv;
+		object.program_tex = program_tex;
+		object.tex = tex;
+		object.texture_used = index;
 		return object;
 	};
 
@@ -199,11 +294,14 @@ int main(int argc, char **argv) {
 					throw std::runtime_error("index entry has out-of-range name begin/end");
 				}
 				std::string name(&strings[0] + entry.name_begin, &strings[0] + entry.name_end);
-				add_object(name, entry.position, entry.rotation, entry.scale);
+				int index = n2id.find(name)->second;
+				std::cout << name << " " << index << " " << tex[index] << std::endl;
+				add_object(name, entry.position, entry.rotation, entry.scale, index, tex[index]);
 			}
 		}
 	}
 
+	/*
 	//create a weird waving tree stack:
 	std::vector< Scene::Object * > tree_stack;
 	tree_stack.emplace_back( &add_object("Tree", glm::vec3(1.0f, 0.0f, 0.2f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(0.3f)) );
@@ -216,6 +314,7 @@ int main(int argc, char **argv) {
 	}
 
 	std::vector< float > wave_acc(tree_stack.size(), 0.0f);
+	*/
 
 	glm::vec2 mouse = glm::vec2(0.0f, 0.0f); //mouse position in [-1,1]x[-1,1] coordinates
 
@@ -225,6 +324,11 @@ int main(int argc, char **argv) {
 		float azimuth = 0.0f;
 		glm::vec3 target = glm::vec3(0.0f, 0.0f, 0.0f);
 	} camera;
+
+
+	//------------ game state -----------
+	
+	int number_of_balloons = 3;
 
 	//------------ game loop ------------
 
@@ -253,11 +357,12 @@ int main(int argc, char **argv) {
 
 		auto current_time = std::chrono::high_resolution_clock::now();
 		static auto previous_time = current_time;
-		float elapsed = std::chrono::duration< float >(current_time - previous_time).count();
+		//float elapsed = std::chrono::duration< float >(current_time - previous_time).count();
 		previous_time = current_time;
 
 		{ //update game state:
 			//tree stack:
+			/*
 			for (uint32_t i = 0; i < tree_stack.size(); ++i) {
 				wave_acc[i] += elapsed * (0.3f + 0.3f * i);
 				wave_acc[i] -= std::floor(wave_acc[i]);
@@ -267,6 +372,7 @@ int main(int argc, char **argv) {
 					glm::vec3(std::cos(ang), std::sin(ang), 0.0f)
 				);
 			}
+			*/
 
 			//camera:
 			scene.camera.transform.position = camera.radius * glm::vec3(
