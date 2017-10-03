@@ -343,9 +343,6 @@ int main(int argc, char **argv) {
 			}
 			*/
 
-			// damp ball velocity
-			ball_velocity = 0.995f * ball_velocity;
-
 
 			// Do state updates for paddle 1
 			obj = n2o.find(P1)->second;
@@ -495,6 +492,16 @@ int main(int argc, char **argv) {
 			// ball movements
 			{
 				obj = n2o.find(Ball)->second;
+				Scene::Object *temp = n2o.find(LF)->second;
+
+				// damp ball velocity
+				if (exclusion(obj, temp)) {
+					ball_velocity = 0.995f * ball_velocity;
+				} else {
+					ball_velocity = 0.9999f * ball_velocity;
+				}
+
+				
 				// ball collision with wall 1
 				if (b2s_collision(n2o.find(W1)->second, obj)) {
 					ball_velocity.x = -ball_velocity.x;
@@ -502,7 +509,7 @@ int main(int argc, char **argv) {
 				if (b2s_collision(n2o.find(W2)->second, obj)) {
 					ball_velocity.x = -ball_velocity.x;
 				}
-				Scene::Object *temp = n2o.find(D1)->second;
+				temp = n2o.find(D1)->second;
 				if (s2s_collision(obj, temp)) {
 					reflect(ball_velocity, 
 							glm::vec2(obj->transform.position - temp->transform.position));
