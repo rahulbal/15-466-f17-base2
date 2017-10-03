@@ -7,7 +7,7 @@ Spin is Rahul Balakrishnan's implementation of [*Design Document*](http://graphi
 ## Screenshots
 
 ![screenshot1](game3.png)
-![screenshot2](game2-action.png)
+![screenshot2](game2_action.png)
 
 ## Pipelines
 
