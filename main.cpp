@@ -14,32 +14,29 @@
 #include <stdexcept>
 #include <fstream>
 
+#include <unistd.h>
+
 static GLuint compile_shader(GLenum type, std::string const &source);
 static GLuint link_program(GLuint vertex_shader, GLuint fragment_shader);
 
-static const int NUM_PNG = 10;
+static const std::string D1 = std::string("Damp1");
+static const std::string D2 = std::string("Damp2");
+static const std::string Field = std::string("Field");
+static const std::string LF = std::string("LowFric");
+static const std::string Ball = std::string("Ball");
+static const std::string P1 = std::string("Paddle1");
+static const std::string P2 = std::string("Paddle2");
+static const std::string W1 = std::string("Wall1");
+static const std::string W2 = std::string("Wall2");
 
-static const std::string PNG_LIST[NUM_PNG] = {
-	"balloon1.png",
-	"balloon2.png",
-	"balloon3.png",
-	"stand.png",
-	"base.png",
-	"link1.png",
-	"link2.png",
-	"link3.png",
-	"crate.png",
-	"cube.png",
-};
-
-static const std::string B1 = std::string("Balloon1");
-static const std::string B2 = std::string("Balloon2");
-static const std::string B3 = std::string("Balloon3");
-static const std::string BASE = std::string("Base");
-static const std::string STAND = std::string("Stand");
-static const std::string LINK1 = std::string("Link1");
-static const std::string LINK2 = std::string("Link2");
-static const std::string LINK3 = std::string("Link3");
+bool exclusion(Scene::Object *obj1, Scene::Object *obj2);
+bool s2s_collision(Scene::Object *obj1,Scene::Object *obj2);
+bool b2s_collision(Scene::Object *block,Scene::Object *sphere);
+bool inclusion(Scene::Object *obj1, Scene::Object *obj2);
+bool s2p_collision(Scene::Object *obj, Scene::Object *temp, float theta, bool dir, glm::vec2 &normal);
+void knock(glm::vec2 &ball_velocity, glm::vec2 normal);
+void reflect(glm::vec2 &ball_velocity, glm::vec2 normal);
+void reflect(glm::vec2 &ball_velocity, glm::vec2 normal, float damp);
 
 int main(int argc, char **argv) {
 	//Configuration:
@@ -110,52 +107,14 @@ int main(int argc, char **argv) {
 
 	//------------ opengl objects / game assets ------------
 
-	//texture:
-	GLuint tex[NUM_PNG];
-	glm::uvec2 tex_size[NUM_PNG];
-	for (int i = 0; i < NUM_PNG; i++) {
-		tex_size[i] = glm::uvec2(0, 0);
-	}
-
-	{ //load textures : 'This is going to be super dirty
-		std::vector< uint32_t > data[NUM_PNG];
-		//std::vector< uint32_t > data;
-
-		//create a texture object:
-		glGenTextures(NUM_PNG, tex);
-
-		for (int i = 0; i < NUM_PNG; i++) {
-			if (!load_png(PNG_LIST[i], &tex_size[i].x, &tex_size[i].y, &data[i], LowerLeftOrigin)) {
-				std::cerr << "Failed to load texture " << PNG_LIST[i] << std::endl;
-				exit(1);
-			}
-			
-			glActiveTexture(GL_TEXTURE0 + i);
-			//bind texture object to GL_TEXTURE_2D:
-			glBindTexture(GL_TEXTURE_2D, tex[i]);
-
-			//upload texture data from data:
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_size[i].x, tex_size[i].y, 0, GL_RGBA, GL_UNSIGNED_BYTE, &data[i][0]);
-
-			std::cout << "i = " << i << " tex[i] = " << tex[i] << std::endl;
-			//set texture sampling parameters:
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		}
-
-	}
-
 	//shader program:
 	GLuint program = 0;
 	GLuint program_Position = 0;
 	GLuint program_Normal = 0;
-	GLuint program_UVCoord = 0;
 	GLuint program_mvp = 0;
 	GLuint program_itmv = 0;
 	GLuint program_to_light = 0;
-	GLuint program_tex = 0;
+	GLuint program_Color = 0;
 	{ //compile shader program:
 		GLuint vertex_shader = compile_shader(GL_VERTEX_SHADER,
 			"#version 330\n"
@@ -163,29 +122,25 @@ int main(int argc, char **argv) {
 			"uniform mat3 itmv;\n"
 			"in vec4 Position;\n"
 			"in vec3 Normal;\n"
-			"in vec2 UVCoord;\n"
+			"in vec3 Color;\n"
 			"out vec3 normal;\n"
-			"out vec2 uvcoord;\n"
+			"out vec3 color;\n"
 			"void main() {\n"
 			"	gl_Position = mvp * Position;\n"
 			"	normal = itmv * Normal;\n"
-			"	uvcoord = UVCoord;\n"
+			"	color = Color;\n"
 			"}\n"
 		);
 
 		GLuint fragment_shader = compile_shader(GL_FRAGMENT_SHADER,
 			"#version 330\n"
 			"uniform vec3 to_light;\n"
-			"uniform sampler2D tex;\n"
 			"in vec3 normal;\n"
-			"in vec2 uvcoord;\n"
+			"in vec3 color;\n"
 			"out vec4 fragColor;\n"
 			"void main() {\n"
 			"	float light = max(0.0, dot(normalize(normal), to_light));\n"
-			"	vec4 color = texture(tex, uvcoord);\n"
-			"	float alpha = color.w;\n"
-			"	fragColor = vec4(light * vec3(color), alpha);\n"
-			//"	fragColor = color;\n"
+			"	fragColor = vec4(light * color, 1.0);\n"
 			"}\n"
 		);
 
@@ -196,8 +151,7 @@ int main(int argc, char **argv) {
 		if (program_Position == -1U) throw std::runtime_error("no attribute named Position");
 		program_Normal = glGetAttribLocation(program, "Normal");
 		if (program_Normal == -1U) throw std::runtime_error("no attribute named Normal");
-		program_UVCoord = glGetAttribLocation(program, "UVCoord");
-		if (program_UVCoord == -1U) throw std::runtime_error("no attribute named UVCoord");
+		program_Color = glGetAttribLocation(program, "Color");
 
 		//look up uniform locations:
 		program_mvp = glGetUniformLocation(program, "mvp");
@@ -207,31 +161,9 @@ int main(int argc, char **argv) {
 
 		program_to_light = glGetUniformLocation(program, "to_light");
 		if (program_to_light == -1U) throw std::runtime_error("no uniform named to_light");
-		program_tex = glGetUniformLocation(program, "tex");
-		if (program_tex == -1U) throw std::runtime_error("no uniform named tex");
 	}
 
 	//--------- Game constants -------
-	
-	std::map <std::string, int> n2id; // name to index map
-	n2id["Balloon1"] = 0;
-	n2id["Balloon2"] = 1;
-	n2id["Balloon3"] = 2;
-	n2id["Stand"]	 = 3;
-	n2id["Base"]	 = 4;
-	n2id["Link1"]	 = 5;
-	n2id["Link2"]	 = 6;
-	n2id["Link3"]	 = 7;
-	n2id["Crate"] 	 = 9;	// giving crate cube as it's texture is invisible
-	n2id["Cube.001"] = 9;
-	n2id["Crate.001"] = 9;
-	n2id["Crate.002"] = 9;
-	n2id["Crate.003"] = 9;
-	n2id["Crate.004"] = 9;
-	n2id["Crate.005"] = 9;
-	n2id["Balloon1-Pop"] = 0;
-	n2id["Balloon2-Pop"] = 1;
-	n2id["Balloon3-Pop"] = 2;
 
 	std::map <std::string, Scene::Object*> n2o;
 
@@ -239,29 +171,26 @@ int main(int argc, char **argv) {
 
 	Meshes meshes;
 
-	std::cerr << "Loading meshes!" << std::endl;
 	{ //add meshes to database:
 		Meshes::Attributes attributes;
 		attributes.Position = program_Position;
 		attributes.Normal = program_Normal;
-		attributes.UVCoord = program_UVCoord;
+		attributes.Color = program_Color;
 
 		meshes.load("meshes.blob", attributes);
 	}
-
-	std::cerr << "Successfully loaded the meshes!" << std::endl;
 	
 	//------------ scene ------------
 
 	Scene scene;
 	//set up camera parameters based on window:
-	scene.camera.fovy = glm::radians(80.0f);
+	scene.camera.fovy = glm::radians(60.0f);
 	scene.camera.aspect = float(config.size.x) / float(config.size.y);
 	scene.camera.near = 0.01f;
 	//(transform will be handled in the update function below)
 
 	//add some objects from the mesh library:
-	auto add_object = [&](std::string const &name, glm::vec3 const &position, glm::quat const &rotation, glm::vec3 const &scale, int &index, GLuint &tex, glm::vec3 const &dimension) -> Scene::Object & {
+	auto add_object = [&](std::string const &name, glm::vec3 const &position, glm::quat const &rotation, glm::vec3 const &scale, glm::vec3 const &dimension) -> Scene::Object & {
 		Mesh const &mesh = meshes.get(name);
 		scene.objects.emplace_back();
 		Scene::Object &object = scene.objects.back();
@@ -274,10 +203,12 @@ int main(int argc, char **argv) {
 		object.program = program;
 		object.program_mvp = program_mvp;
 		object.program_itmv = program_itmv;
-		object.program_tex = program_tex;
-		object.tex = tex;
-		object.texture_used = index;
 		object.dimension = dimension;
+		if (name == "Paddle1" || name == "Paddle2") {
+			object.radius = glm::vec2(dimension.x, dimension.x);
+		} else {
+			object.radius = glm::vec2(dimension.x / 2.0f, dimension.y / 2.0f);
+		}
 		n2o[name] = &object;
 		return object;
 	};
@@ -300,8 +231,6 @@ int main(int argc, char **argv) {
 			};
 			static_assert(sizeof(SceneEntry) == 60, "Scene entry should be packed");
 
-			std::cout << "scn0 accessed" << std::endl;
-
 			std::vector< SceneEntry > data;
 			read_chunk(file, "scn0", &data);
 
@@ -310,69 +239,50 @@ int main(int argc, char **argv) {
 					throw std::runtime_error("index entry has out-of-range name begin/end");
 				}
 				std::string name(&strings[0] + entry.name_begin, &strings[0] + entry.name_end);
-				int index = n2id.find(name)->second;
-				std::cout << name << " " << index << " " << tex[index] << std::endl;
-				add_object(name, entry.position, entry.rotation, entry.scale, index, tex[index], entry.dimension);
+				add_object(name, entry.position, entry.rotation, entry.scale, entry.dimension);
 			}
 		}
 	}
 
-	//------- manually creating heirarchy ----------
-	
-	Scene::Object *tmp1, *tmp2;
-	tmp1 = n2o.find(BASE)->second;
-	tmp2 = n2o.find(STAND)->second;
-	tmp1->transform.set_parent(&(tmp2->transform));
-	tmp2 = tmp1;
-	tmp1 = n2o.find(LINK1)->second;
-	tmp1->transform.set_parent(&(tmp2->transform));
-	tmp2 = tmp1;
-	tmp1 = n2o.find(LINK2)->second;
-	tmp1->transform.set_parent(&(tmp2->transform));
-	tmp2 = tmp1;
-	tmp1 = n2o.find(LINK3)->second;
-	tmp1->transform.set_parent(&(tmp2->transform));
-
-
-	/*
-	//create a weird waving tree stack:
-	std::vector< Scene::Object * > tree_stack;
-	tree_stack.emplace_back( &add_object("Tree", glm::vec3(1.0f, 0.0f, 0.2f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(0.3f)) );
-	tree_stack.emplace_back( &add_object("Tree", glm::vec3(0.0f, 0.0f, 1.7f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(0.9f)) );
-	tree_stack.emplace_back( &add_object("Tree", glm::vec3(0.0f, 0.0f, 1.7f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(0.9f)) );
-	tree_stack.emplace_back( &add_object("Tree", glm::vec3(0.0f, 0.0f, 1.7f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(0.9f)) );
-
-	for (uint32_t i = 1; i < tree_stack.size(); ++i) {
-		tree_stack[i]->transform.set_parent(&tree_stack[i-1]->transform);
-	}
-
-	std::vector< float > wave_acc(tree_stack.size(), 0.0f);
-	*/
-
 	glm::vec2 mouse = glm::vec2(0.0f, 0.0f); //mouse position in [-1,1]x[-1,1] coordinates
 
 	struct {
-		float radius = 5.0f;
-		float elevation = 0.0f;
+		float radius = 10.0f;
+		float elevation = 1.0f;
 		float azimuth = 0.0f;
 		glm::vec3 target = glm::vec3(0.0f, 0.0f, 0.0f);
 	} camera;
 
-
-	//------------ game state -----------
-	
-	int number_of_balloons = 3;
-	bool balloon_dir[number_of_balloons];
-
 	//------------ game loop ------------
 
-	bool should_quit = false;
-	float theta = 0.0f;
-	float phi = 0.0f;
-	float rho = 0.0f;
-	float gamma = 0.0f;
+	// default direction of P1
+	const bool CCW = false;
+	const bool CW = true;
+	bool p1_dir = CCW;
+	bool p2_dir = CW;
 
-	while (true) {
+	Scene::Object *obj;
+
+	// paddle movement and rotation variables
+	obj = n2o.find(P1)->second;
+	float p1_angle = glm::angle(obj->transform.rotation);
+
+	obj = n2o.find(P2)->second;
+	float p2_angle = glm::angle(obj->transform.rotation);
+
+	const float rotation_speed  = 5.0f;
+	const float paddle_speed = 2.0f;
+
+	bool player1_win = false;
+	bool player2_win = false;
+	bool game_over = false;
+	//-----------------------------------
+
+	// velocity of the ball
+	glm::vec2 ball_velocity = glm::vec2(0.0f, 0.0f);
+
+	bool should_quit = false;
+	while (!game_over) {
 		static SDL_Event evt;
 		while (SDL_PollEvent(&evt) == 1) {
 			//handle input:
@@ -385,8 +295,28 @@ int main(int argc, char **argv) {
 					camera.azimuth += -2.0f * (mouse.x - old_mouse.x);
 				}
 			} else if (evt.type == SDL_MOUSEBUTTONDOWN) {
-			} else if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_ESCAPE) {
-				should_quit = true;
+			} else if (evt.type == SDL_KEYDOWN && evt.key.repeat == 0) {
+				switch(evt.key.keysym.sym) {
+					case SDLK_ESCAPE:
+						should_quit = true;
+						break;
+					case SDLK_q:
+						if (p2_dir == CW) {
+							p2_dir = CCW;
+						} else {
+							p2_dir = CW;
+						}
+						break;
+					case SDLK_SLASH:
+						if (p1_dir == CW) {
+							p1_dir = CCW;
+						} else {
+							p1_dir = CW;
+						}
+						break;
+					default:
+						break;
+				}
 			} else if (evt.type == SDL_QUIT) {
 				should_quit = true;
 				break;
@@ -413,105 +343,206 @@ int main(int argc, char **argv) {
 			}
 			*/
 
-			// update balloon positions
-			Scene::Object *obj;
+			// damp ball velocity
+			ball_velocity = 0.995f * ball_velocity;
 
-			obj = n2o.find(B1)->second;
-			if (obj->transform.position.z - obj->dimension.z < -0.5f) {
-				balloon_dir[0] = true;
-			} else if (obj->transform.position.z - obj->dimension.z / 2 > 5.0f) {
-				balloon_dir[0] = false;
+
+			// Do state updates for paddle 1
+			obj = n2o.find(P1)->second;
+			// update the angle of rotation
+			if (p1_dir == CW) {
+				p1_angle -= elapsed * rotation_speed;
+				obj->transform.rotation = glm::angleAxis(p1_angle,
+					glm::vec3(0.0f, 0.0f, 1.0f));
+			} else {
+				p1_angle += elapsed * rotation_speed;
+				obj->transform.rotation = glm::angleAxis(p1_angle,
+					glm::vec3(0.0f, 0.0f, 1.0f));
 			}
-			obj->transform.position.z += (balloon_dir[0] ? 1 : -1) * elapsed * 1.0;
-
-			obj = n2o.find(B2)->second;
-			if (obj->transform.position.z - obj->dimension.z < -0.5f) {
-				balloon_dir[1] = true;
-			} else if (obj->transform.position.z - obj->dimension.z / 2 > 5.0f) {
-				balloon_dir[1] = false;
-			}
-			obj->transform.position.z += (balloon_dir[1] ? 1 : -1) * elapsed * 1.0;
-
-			obj = n2o.find(B3)->second;
-			if (obj->transform.position.z - obj->dimension.z < -0.5f) {
-				balloon_dir[2] = true;
-			} else if (obj->transform.position.z - obj->dimension.z / 2 > 5.0f) {
-				balloon_dir[2] = false;
-			}
-			obj->transform.position.z += (balloon_dir[2] ? 1 : -1) * elapsed * 1.0;
-			
-
-			obj = n2o.find(LINK3)->second;
+			// update the position
+			// Check keystates
 			auto *keystate = SDL_GetKeyboardState(NULL);
-			if (keystate[SDL_SCANCODE_Z]) {
-				if (theta < M_PI / 2) {
-					theta += elapsed * 0.2f;
+			if (keystate[SDL_SCANCODE_UP]) {
+				obj->transform.position.x -= elapsed * paddle_speed;
+				// Check collisions
+				bool collision = false;
+				collision |= s2s_collision(obj, n2o.find(P2)->second);
+				collision |= s2s_collision(obj, n2o.find(D1)->second);
+				collision |= s2s_collision(obj, n2o.find(D2)->second);
+				collision |= b2s_collision(n2o.find(W1)->second, obj);
+				collision |= b2s_collision(n2o.find(W2)->second, obj);
+				collision |= exclusion(obj, n2o.find(Field)->second);
+				if (collision) {
+					obj->transform.position.x += elapsed * paddle_speed;
 				}
-				obj->transform.rotation = glm::angleAxis(theta / float(M_PI) * 180.f,
-					glm::vec3(1.0f, 0.0f, 0.0f));
+			}
+			if (keystate[SDL_SCANCODE_RIGHT]) {
+				obj->transform.position.y += elapsed * paddle_speed;
+				// Check collisions
+				bool collision = false;
+				collision |= s2s_collision(obj, n2o.find(P2)->second);
+				collision |= s2s_collision(obj, n2o.find(D1)->second);
+				collision |= s2s_collision(obj, n2o.find(D2)->second);
+				collision |= b2s_collision(n2o.find(W1)->second, obj);
+				collision |= b2s_collision(n2o.find(W2)->second, obj);
+				collision |= exclusion(obj, n2o.find(Field)->second);
+				if (collision) {
+					obj->transform.position.y -= elapsed * paddle_speed;
+				}
+			}
+			if (keystate[SDL_SCANCODE_DOWN]) {
+				obj->transform.position.x += elapsed * paddle_speed;
+				// Check collisions
+				bool collision = false;
+				collision |= s2s_collision(obj, n2o.find(P2)->second);
+				collision |= s2s_collision(obj, n2o.find(D1)->second);
+				collision |= s2s_collision(obj, n2o.find(D2)->second);
+				collision |= b2s_collision(n2o.find(W1)->second, obj);
+				collision |= b2s_collision(n2o.find(W2)->second, obj);
+				collision |= exclusion(obj, n2o.find(Field)->second);
+				if (collision) {
+					obj->transform.position.x -= elapsed * paddle_speed;
+				}
+			}
+			if (keystate[SDL_SCANCODE_LEFT]) {
+				obj->transform.position.y -= elapsed * paddle_speed;
+				// Check collisions
+				bool collision = false;
+				collision |= s2s_collision(obj, n2o.find(P2)->second);
+				collision |= s2s_collision(obj, n2o.find(D1)->second);
+				collision |= s2s_collision(obj, n2o.find(D2)->second);
+				collision |= b2s_collision(n2o.find(W1)->second, obj);
+				collision |= b2s_collision(n2o.find(W2)->second, obj);
+				collision |= exclusion(obj, n2o.find(Field)->second);
+				if (collision) {
+					obj->transform.position.y += elapsed * paddle_speed;
+				}
+
 			}
 
-			if (keystate[SDL_SCANCODE_X]) {
-				if (theta > -M_PI / 2) {
-					theta -= elapsed * 0.2f;
-				}
-				obj->transform.rotation = glm::angleAxis(theta / float(M_PI) * 180.f,
-					glm::vec3(1.0f, 0.0f, 0.0f));
-
+			// Do state updates for paddle 2
+			obj = n2o.find(P2)->second;
+			// update the angle of rotation
+			if (p2_dir == CW) {
+				p2_angle -= elapsed * rotation_speed;
+				obj->transform.rotation = glm::angleAxis(p2_angle,
+					glm::vec3(0.0f, 0.0f, 1.0f));
+			} else {
+				p2_angle += elapsed * rotation_speed;
+				obj->transform.rotation = glm::angleAxis(p2_angle,
+					glm::vec3(0.0f, 0.0f, 1.0f));
 			}
-
-			obj = n2o.find(LINK2)->second;
-			if (keystate[SDL_SCANCODE_A]) {
-				if (theta < M_PI / 2) {
-					phi += elapsed * 0.2f;
+			// update the position
+			// Check keystates
+			keystate = SDL_GetKeyboardState(NULL);
+			if (keystate[SDL_SCANCODE_W]) {
+				obj->transform.position.x -= elapsed * paddle_speed;
+				// Check collisions
+				bool collision = false;
+				collision |= s2s_collision(obj, n2o.find(P1)->second);
+				collision |= s2s_collision(obj, n2o.find(D1)->second);
+				collision |= s2s_collision(obj, n2o.find(D2)->second);
+				collision |= b2s_collision(n2o.find(W1)->second, obj);
+				collision |= b2s_collision(n2o.find(W2)->second, obj);
+				collision |= exclusion(obj, n2o.find(Field)->second);
+				if (collision) {
+					obj->transform.position.x += elapsed * paddle_speed;
 				}
-				obj->transform.rotation = glm::angleAxis(phi / float(M_PI) * 180.f,
-					glm::vec3(1.0f, 0.0f, 0.0f));
-
 			}
-
+			if (keystate[SDL_SCANCODE_D]) {
+				obj->transform.position.y += elapsed * paddle_speed;
+				// Check collisions
+				bool collision = false;
+				collision |= s2s_collision(obj, n2o.find(P1)->second);
+				collision |= s2s_collision(obj, n2o.find(D1)->second);
+				collision |= s2s_collision(obj, n2o.find(D2)->second);
+				collision |= b2s_collision(n2o.find(W1)->second, obj);
+				collision |= b2s_collision(n2o.find(W2)->second, obj);
+				collision |= exclusion(obj, n2o.find(Field)->second);
+				if (collision) {
+					obj->transform.position.y -= elapsed * paddle_speed;
+				}
+			}
 			if (keystate[SDL_SCANCODE_S]) {
-				if (theta < M_PI / 2) {
-					phi -= elapsed * 0.2f;
+				obj->transform.position.x += elapsed * paddle_speed;
+				// Check collisions
+				bool collision = false;
+				collision |= s2s_collision(obj, n2o.find(P1)->second);
+				collision |= s2s_collision(obj, n2o.find(D1)->second);
+				collision |= s2s_collision(obj, n2o.find(D2)->second);
+				collision |= b2s_collision(n2o.find(W1)->second, obj);
+				collision |= b2s_collision(n2o.find(W2)->second, obj);
+				collision |= exclusion(obj, n2o.find(Field)->second);
+				if (collision) {
+					obj->transform.position.x -= elapsed * paddle_speed;
 				}
-				obj->transform.rotation = glm::angleAxis(phi / float(M_PI) * 180.f,
-					glm::vec3(1.0f, 0.0f, 0.0f));
+			}
+			if (keystate[SDL_SCANCODE_A]) {
+				obj->transform.position.y -= elapsed * paddle_speed;
+				// Check collisions
+				bool collision = false;
+				collision |= s2s_collision(obj, n2o.find(P1)->second);
+				collision |= s2s_collision(obj, n2o.find(D1)->second);
+				collision |= s2s_collision(obj, n2o.find(D2)->second);
+				collision |= b2s_collision(n2o.find(W1)->second, obj);
+				collision |= b2s_collision(n2o.find(W2)->second, obj);
+				collision |= exclusion(obj, n2o.find(Field)->second);
+				if (collision) {
+					obj->transform.position.y += elapsed * paddle_speed;
+				}
 			}
 
-			obj = n2o.find(LINK1)->second;
-			if (keystate[SDL_SCANCODE_PERIOD]) {
-				if (theta < M_PI / 2) {
-					rho += elapsed * 0.2f;
+			// ball movements
+			{
+				obj = n2o.find(Ball)->second;
+				// ball collision with wall 1
+				if (b2s_collision(n2o.find(W1)->second, obj)) {
+					ball_velocity.x = -ball_velocity.x;
 				}
-				obj->transform.rotation = glm::angleAxis(rho / float(M_PI) * 180.f,
-					glm::vec3(1.0f, 0.0f, 0.0f));
+				if (b2s_collision(n2o.find(W2)->second, obj)) {
+					ball_velocity.x = -ball_velocity.x;
+				}
+				Scene::Object *temp = n2o.find(D1)->second;
+				if (s2s_collision(obj, temp)) {
+					reflect(ball_velocity, 
+							glm::vec2(obj->transform.position - temp->transform.position));
+				}
+				temp = n2o.find(D2)->second;
+				if (s2s_collision(obj, temp)) {
+					reflect(ball_velocity, 
+							glm::vec2(obj->transform.position - temp->transform.position));
+				}
+				temp = n2o.find(P1)->second;
+				glm::vec2 normal;
+				if (s2p_collision(obj, temp, p1_angle, p1_dir, normal)) {
+					knock(ball_velocity, normal);
+				}
+				temp = n2o.find(P2)->second;
+				if (s2p_collision(obj, temp, p2_angle, p2_dir, normal)) {
+					knock(ball_velocity, normal);
+				}
+				obj->transform.position.x += ball_velocity.x * elapsed;
+				obj->transform.position.y += ball_velocity.y * elapsed;
+
+				temp = n2o.find(Field)->second;
+				//victory conditions
+				if (obj->transform.position.y > temp->transform.position.y + temp->dimension.y / 2) {
+					player2_win = true;
+					game_over = true;
+				} else if (obj->transform.position.y < temp->transform.position.y - temp->dimension.y / 2) {
+					player1_win = true;
+					game_over = true;
+				}
 			}
 
-			if (keystate[SDL_SCANCODE_SLASH]) {
-				if (theta < M_PI / 2) {
-					rho -= elapsed * 0.2f;
+			if (game_over) {
+				if (player1_win) {
+					std::cout << "player1 wins" << std::endl;
+				} else if (player2_win) {
+					std::cout << "player2 wins" << std::endl;
 				}
-				obj->transform.rotation = glm::angleAxis(rho / float(M_PI) * 180.f,
-					glm::vec3(1.0f, 0.0f, 0.0f));
 			}
 
-			obj = n2o.find(BASE)->second;
-			if (keystate[SDL_SCANCODE_SEMICOLON]) {
-				if (theta < M_PI / 2) {
-					gamma += elapsed * 0.2f;
-				}
-				obj->transform.rotation = glm::angleAxis(gamma / float(M_PI) * 180.f,
-					glm::vec3(0.0f, 0.0f, 1.0f));
-			}
-
-			if (keystate[SDL_SCANCODE_APOSTROPHE]) {
-				if (theta < M_PI / 2) {
-					gamma -= elapsed * 0.2f;
-				}
-				obj->transform.rotation = glm::angleAxis(gamma / float(M_PI) * 180.f,
-					glm::vec3(0.0f, 0.0f, 1.0f));
-			}
-			
 			//camera:
 			scene.camera.transform.position = camera.radius * glm::vec3(
 				std::cos(camera.elevation) * std::cos(camera.azimuth),
@@ -527,9 +558,11 @@ int main(int argc, char **argv) {
 				glm::mat3(right, up, out)
 			);
 			scene.camera.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
-		}
 
-		
+			if (game_over) {
+				sleep(1);
+			}
+		}
 
 		//draw output:
 		glClearColor(0.5, 0.5, 0.5, 0.0);
@@ -603,4 +636,84 @@ static GLuint link_program(GLuint fragment_shader, GLuint vertex_shader) {
 		throw std::runtime_error("Failed to link program");
 	}
 	return program;
+}
+
+bool s2s_collision(Scene::Object *obj1,Scene::Object *obj2) {
+	float x = obj1->transform.position.x - obj2->transform.position.x;
+	float y = obj1->transform.position.y - obj2->transform.position.y;
+
+	float dist = std::sqrt(x * x + y * y);
+
+	if (dist < obj1->radius.x + obj2->radius.x) {
+		return true;
+	}
+	return false;
+}
+
+bool b2s_collision(Scene::Object *block,Scene::Object *sphere) {
+	if ((block->transform.position.x + block->dimension.x / 2
+			> sphere->transform.position.x - sphere->radius.x)
+		&& (block->transform.position.x - block->dimension.x / 2
+			< sphere->transform.position.x + sphere->radius.x)
+		&& (block->transform.position.y + block->dimension.y / 2
+			> sphere->transform.position.y - sphere->radius.y)
+		&& (block->transform.position.y - block->dimension.y / 2
+			< sphere->transform.position.y + sphere->radius.y)) {
+		return true;
+	}
+	return false;
+}
+
+bool exclusion(Scene::Object *obj1, Scene::Object *obj2) {
+	if (obj1->transform.position.x < obj2->transform.position.x + obj2->dimension.x / 2
+			&& obj1->transform.position.x > obj2->transform.position.x - obj2->dimension.x / 2
+			&& obj1->transform.position.y < obj2->transform.position.y + obj2->dimension.y / 2
+			&& obj1->transform.position.y > obj2->transform.position.y - obj2->dimension.y / 2) {
+		return false;
+	}
+
+	return true;
+}
+
+bool s2p_collision(Scene::Object *obj, Scene::Object *temp, float theta, bool dir, glm::vec2 &normal) {
+	glm::vec2 v1 = glm::vec2(obj->transform.position - temp->transform.position);
+	glm::vec2 v2 = glm::vec2(temp->radius.x * std::cos(theta), temp->radius.x * std::sin(theta));
+	normalize(v2);
+	float r = dot(v1, v2);
+	if ( r < 0 || r > temp->radius.x + obj->radius.x) {
+		return false;
+	}
+	glm::vec2 req = v1 - r * v2;
+	float height = std::sqrt(dot(req, req));
+	if (dir) {
+		normal.x = req.y;
+		normal.y = -req.x;
+	} else {
+		normal.x = -req.y;
+		normal.y = req.x;
+	}
+
+	if (height < obj->radius.x + temp->dimension.y / 2) {
+		return true;
+	}
+	return false;
+}
+
+void knock(glm::vec2 &ball_velocity, glm::vec2 normal) {
+	normalize(normal);
+	ball_velocity = 10.0f * normal;
+}
+
+void reflect(glm::vec2 &ball_velocity, glm::vec2 normal) {
+	reflect(ball_velocity, normal, 5.0f);
+}
+
+void reflect(glm::vec2 &ball_velocity, glm::vec2 normal, float damp) {
+	normalize(normal);
+	glm::vec2 neg = -ball_velocity;
+	float angle = std::acos(dot(neg, normal) / length(neg));
+	float y = 5.0f * std::cos(angle);
+	float x = -std::sin(angle) * length(neg);
+	ball_velocity.x = x;
+	ball_velocity.y = y;
 }

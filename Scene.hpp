@@ -71,6 +71,7 @@ struct Scene {
 		int texture_used;
 
 		glm::vec3 dimension;
+		glm::vec2 radius;
 	};
 	struct Light {
 		Transform transform;

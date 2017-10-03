@@ -1,32 +1,32 @@
 NOTE: please fill in the first section with information about your game.
 
-# Robot Fun Police
+# Spin
 
-Robot Fun Police is Rahul Balakrishnan's implementation of [*Design Document*](http://graphics.cs.cmu.edu/courses/15-466-f17/game2-designs/jmccann/) for game2 in 15-466-f17.
+Spin is Rahul Balakrishnan's implementation of [*Design Document*](http://graphics.cs.cmu.edu/courses/15-466-f17/game3-designs/hungyuc/) for game3 in 15-466-f17.
 
 ## Screenshots
 
-![screenshot1](game2.png)
-![screenshot2](game2_work.png)
+![screenshot1](game3.png)
+![screenshot2](game2-action.png)
 
 ## Pipelines
 
-The python script export meshes located in models extracts the vertices, texture coordinates and the dimension of the object it extracts.
+The python script export meshes located in models extracts the vertices, vertex colors and the dimension of the object it extracts.
 To create the assets in dist execute the python with blender.
-The textures were manually extracted.
 
 ## Architecture
 
-My largest investment was in textures. I feel that I really nailed the textures this time around. The code is more structured using maps to easily access data.
-The movement script has been improved.
+Created a map to maintain the game objects.
+Handled the rotation of objects in the game loop.
+Triggers activate flip of the paddle.
+Rudimentary friction implemented as per doc.
+Physics for rotary collision was included. Some amout of friction has been programmed. Game seems fun, so far glitch free.
 
 ## Reflection
 
-I expected scene to be related dynamically from the scene script. I turns out there was no implementation. I found this out too late to do anything about it. Should have started earlier.
+This project was finished comfortably. Unfortunately the assets were missing and I had to draw them myself.
 
-I used multiple texture levels. That feels like an accomplishment. I have a pop mechanism built and I am sure the texture will work but have not implemented it yet.
-
-# About Base2
+# About Base3
 
 This game is based on Base2, starter code for game2 in the 15-466-f17 course. It was developed by Jim McCann, and is released into the public domain.
 

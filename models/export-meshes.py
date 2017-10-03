@@ -5,8 +5,7 @@
 #Note: Script meant to be executed from within blender, as per:
 #blender --background --python export-meshes.py
 
-#reads 'island.blend' and writes '../dist/meshes.blob' (meshes) and '../dist/scene.blob' (scene in layer 1)
-#reads 'robot.blend' and writes '../dist/meshes.blob' (meshes) and '../dist/scene.blob' (scene in layer 1)
+#reads 'spin.blend' and writes '../dist/meshes.blob' (meshes) and '../dist/scene.blob' (scene in layer 1)
 
 import sys
 
@@ -14,34 +13,19 @@ import bpy
 import struct
 
 #bpy.ops.wm.open_mainfile(filepath='island.blend')
-bpy.ops.wm.open_mainfile(filepath='robot.blend')
+bpy.ops.wm.open_mainfile(filepath='spin.blend')
 
 #names of objects whose meshes to write (not actually the names of the meshes):
 to_write = [
-#    'House',
-#    'Land',
-#    'Tree',
-#    'Water',
-#    'Rock',
-        'Balloon1',
-        'Balloon1-Pop',
-        'Balloon2',
-        'Balloon2-Pop',
-        'Balloon3',
-        'Balloon3-Pop',
-        'Crate',
-        'Crate.001',
-        'Crate.002',
-        'Crate.003',
-        'Crate.004',
-        'Crate.005',
-        'Cube.001',
-        'Stand',
-        'Base',
-        'Link1',
-        'Link2',
-        'Link3',
-
+    'Damp1',
+    'Damp2',
+    'Field',
+    'LowFric',
+    'Ball',
+    'Paddle1',
+    'Paddle2',
+    'Wall1',
+    'Wall2',
 ]
 
 #data contains vertex and normal data from the meshes:
@@ -112,7 +96,7 @@ for name in to_write:
                 data += struct.pack("f",item)
             for item in mesh.vertices[vert].normal:  # normal
                 data += struct.pack("f",item)
-            for item in (mesh.uv_layers.active.data[loop].uv if mesh.uv_layers.active is not None else (0.0, 0.0)):  # uv
+            for item in mesh.vertex_colors.active.data[loop].color:
                 data += struct.pack("f",item)
 
     vertex_count += len(mesh.polygons) * 3
@@ -120,7 +104,7 @@ for name in to_write:
 
 
 #check that we wrote as much data as anticipated:
-assert(vertex_count * (3 * 4 + 3 * 4 + 2 * 4) == len(data))
+assert(vertex_count * (3 * 4 + 3 * 4 + 3 * 4) == len(data))
 
 print("size")
 print(len(data))
@@ -148,7 +132,7 @@ print("Wrote " + str(blob.tell()) + " bytes to meshes.blob")
 #(re-open file because we adjusted mesh users in the export above)
 #bpy.ops.wm.open_mainfile(filepath='island.blend')
 print("**")
-bpy.ops.wm.open_mainfile(filepath='robot.blend')
+bpy.ops.wm.open_mainfile(filepath='spin.blend')
 print("--")
 
 #strings chunk will have names
@@ -165,6 +149,8 @@ for name in to_write:
 #scene chunk will have transforms + indices into strings for name
 scene = b''
 for obj in bpy.data.objects:
+    if obj.type != 'MESH':
+        continue
     if obj.layers[0] == False: continue
     if not obj.data.name in name_begin:
         print("WARNING: not writing object '" + obj.name + "' because mesh not written.")
@@ -176,6 +162,7 @@ for obj in bpy.data.objects:
     scene += struct.pack('4f', transform[1].x, transform[1].y, transform[1].z, transform[1].w)
     scene += struct.pack('3f', transform[2].x, transform[2].y, transform[2].z)
     scene += struct.pack('3f', obj.dimensions.x, obj.dimensions.y, obj.dimensions.z)
+    print(obj.dimensions.x)
 
 print("opening file to write with")
 #write the strings chunk and scene chunk to an output blob:
